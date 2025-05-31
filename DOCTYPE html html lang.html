@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Gizli Takip Uyarıcısı</title>
+  <style>
+    body { font-family: Arial; background: #111; color: #0f0; padding: 20px; text-align: center; }
+    button, input { padding: 10px; background: #222; color: #0f0; border: 1px solid #0f0; margin: 5px; }
+    #app, #video, canvas { display: none; }
+    #log { margin-top: 20px; white-space: pre-wrap; background: #000; padding: 10px; border: 1px solid #0f0; max-height: 300px; overflow-y: auto; }
+    #errorMsg { color: red; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div id="lockScreen">
+    <h2>🔒 Parola Gerekli</h2>
+    <input type="password" id="passwordInput" placeholder="Parola">
+    <button onclick="checkPassword()">Giriş</button>
+    <div id="errorMsg"></div>
+  </div>
+
+  <div id="app">
+    <h2>📍 Gizli Takip Uyarıcısı</h2>
+    <button onclick="startTracking()">▶️ Başlat</button>
+    <button onclick="takePhoto()">📷 Fotoğraf Al</button>
+    <button onclick="downloadLog()">📦 Logu İndir</button>
+    <button onclick="lockSystem()">🔒 Kilitle</button>
+    <div id="log">Log Başlatılmadı.</div>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" width="320" height="240"></canvas>
+  </div>
+
+  <script>
+    const correctPassword = "4050";
+    let attemptsLeft = 3;
+    let mediaStream = null;
+
+    function checkPassword() {
+      const input = document.getElementById("passwordInput").value;
+      const errorMsg = document.getElementById("errorMsg");
+
+      if (input === correctPassword) {
+        document.getElementById("lockScreen").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        document.getElementById("passwordInput").value = "";
+        errorMsg.textContent = "";
+        attemptsLeft = 3;
+        document.getElementById("passwordInput").disabled = false;
+      } else {
+        attemptsLeft--;
+        if (attemptsLeft > 0) {
+          errorMsg.textContent = `❌ Hatalı parola! Kalan hakkınız: ${attemptsLeft}`;
+        } else {
+          errorMsg.textContent = "⛔ Giriş hakkınız kalmadı. Sistem kilitlendi.";
+          document.getElementById("passwordInput").disabled = true;
+        }
+      }
+    }
+
+    function lockSystem() {
+      document.getElementById("app").style.display = "none";
+      document.getElementById("lockScreen").style.display = "block";
+      document.getElementById("errorMsg").textContent = "";
+      document.getElementById("passwordInput").value = "";
+    }
+
+    const logDiv = document.getElementById("log");
+    const logs = [];
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+
+    function log(msg) {
+      const now = new Date().toLocaleTimeString();
+      const entry = `[${now}] ${msg}`;
+      logs.push(entry);
+      logDiv.textContent += `\n${entry}`;
+    }
+
+    function startTracking() {
+      log("Takip başlatıldı...");
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const { latitude, longitude } = pos.coords;
+          log(`Konum: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        }, () => {
+          log("Konum alınamadı.");
+        });
+      }
+
+      if ('AmbientLightSensor' in window) {
+        try {
+          const sensor = new AmbientLightSensor();
+          sensor.addEventListener('reading', () => {
+            if (sensor.illuminance > 100) {
+              log(`📸 Parlak ışık algılandı: ${sensor.illuminance} lux`);
+            }
+          });
+          sensor.start();
+        } catch {
+          log("Işık sensörü çalıştırılamadı.");
+        }
+      } else {
+        log("Ortam ışığı sensörü desteklenmiyor.");
+      }
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }).then(stream => {
+        mediaStream = stream;
+        video.srcObject = stream;
+        video.style.display = "none";
+        log("📷 Kamera başlatıldı.");
+      }).catch(() => {
+        log("Kamera erişimi reddedildi.");
+      });
+    }
+
+    function takePhoto() {
+      if (!mediaStream) {
+        log("📷 Kamera aktif değil.");
+        return;
+      }
+      const context = canvas.getContext('2d');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataURL = canvas.toDataURL('image/png');
+      log("📸 Fotoğraf alındı.");
+      const img = new Image();
+      img.src = dataURL;
+      img.style.width = "160px";
+      img.style.marginTop = "10px";
+      document.body.appendChild(img);
+    }
+
+    function downloadLog() {
+      const blob = new Blob([logs.join("\n")], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gizli_takip_log.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
+
